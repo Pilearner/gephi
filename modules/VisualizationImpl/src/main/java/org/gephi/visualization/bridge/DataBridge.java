@@ -49,6 +49,7 @@ import org.gephi.graph.api.Graph;
 import org.gephi.graph.api.GraphController;
 import org.gephi.graph.api.GraphModel;
 import org.gephi.graph.api.GraphObserver;
+import org.gephi.graph.api.GraphView;
 import org.gephi.graph.api.Node;
 import org.gephi.visualization.GraphLimits;
 import org.gephi.visualization.VizArchitecture;
@@ -62,6 +63,7 @@ import org.gephi.visualization.octree.Octree;
 import org.gephi.visualization.opengl.AbstractEngine;
 import org.gephi.visualization.text.TextManager;
 import org.gephi.visualization.text.TextModelImpl;
+import org.openide.util.Exceptions;
 import org.openide.util.Lookup;
 
 /**
@@ -83,10 +85,12 @@ public class DataBridge implements VizArchitecture {
     private VizConfig vizConfig;
     private TextModelImpl textModel;
     protected GraphLimits limits;
+
     //Graph
     protected GraphModel graphModel;
     protected Graph graph;
     protected GraphObserver observer;
+
     //Data
     protected NodeModel[] nodes;
     protected EdgeModel[] edges;
@@ -119,7 +123,7 @@ public class DataBridge implements VizArchitecture {
         if (e == null) {
             return null;
         }
-        
+
         EdgeModel[] models = new EdgeModel[e.length];
 
         for (int i = 0; i < e.length; i++) {
@@ -133,26 +137,31 @@ public class DataBridge implements VizArchitecture {
     public synchronized boolean updateWorld() {
         boolean force = false;
 
+        boolean visibleViewChanged = false;
         if (graphModel != null) {
-            graphModel.getGraph().writeLock();
-        }
-        try {
-            if ((observer != null && observer.isDestroyed()) || (graphModel != null && graph.getView() != graphModel.getVisibleView())) {
-                if (observer != null && !observer.isDestroyed()) {
-                    observer.destroy();
-                }
-                observer = null;
-
-                if (graphModel != null) {
-                    graph = graphModel.getGraphVisible();
-                    observer = graphModel.createGraphObserver(graph, false);
-                    force = true;
-                }
-            }
-        } finally {
-            if (graphModel != null) {
+            graphModel.getGraph().readLock();
+            try {
+                visibleViewChanged = graph.getView() != graphModel.getVisibleView();
+            } finally {
                 graphModel.getGraph().readUnlockAll();
+            }
+        }
+
+        if (visibleViewChanged || (observer != null && observer.isDestroyed())) {
+            if (observer != null && !observer.isDestroyed()) {
+                observer.destroy();
+            }
+
+            observer = null;
+
+            graphModel.getGraph().writeLock();
+            try {
+                graph = graphModel.getGraphVisible();
+                observer = graphModel.createGraphObserver(graph, false);
+                force = true;
+            } finally {
                 graphModel.getGraph().writeUnlock();
+                graphModel.getGraph().readUnlockAll();
             }
         }
 
@@ -172,8 +181,8 @@ public class DataBridge implements VizArchitecture {
 
             graph.readLock();
             try {
-
-                boolean isView = !graph.getView().isMainView();
+                GraphView graphView = graph.getView();
+                boolean isView = !graphView.isMainView();
                 for (int i = 0; i < nodes.length; i++) {
                     NodeModel node = nodes[i];
                     if (node != null && (node.getNode().getStoreId() == -1 || (isView && !graph.contains(node.getNode())))) {
@@ -234,7 +243,7 @@ public class DataBridge implements VizArchitecture {
                     } else {
                         model = edges[id];
                     }
-                    float w = (float) edge.getWeight(graph.getView());
+                    float w = (float) edge.getWeight(graphView);
                     model.setWeight(w);
                     minWeight = Math.min(w, minWeight);
                     maxWeight = Math.max(w, maxWeight);
@@ -245,6 +254,9 @@ public class DataBridge implements VizArchitecture {
                     limits.setMaxWeight(maxWeight);
                     limits.setMinWeight(minWeight);
                 }
+            } catch (Throwable e) {
+                //Don't crash the whole visualization if some strange exception occurs
+                Exceptions.printStackTrace(e);
             } finally {
                 graph.readUnlockAll();
             }
@@ -274,14 +286,16 @@ public class DataBridge implements VizArchitecture {
                 return true;
             }
 
-            boolean nodeC = false, edgeC = false;
             for (ColumnObserver c : nodeColumnObservers) {
-                nodeC = nodeC | c.hasColumnChanged();
+                if (c.hasColumnChanged()) {
+                    return true;
+                }
             }
             for (ColumnObserver c : edgeColumnObservers) {
-                edgeC = edgeC | c.hasColumnChanged();
+                if (c.hasColumnChanged()) {
+                    return true;
+                }
             }
-            return nodeC || edgeC;
         }
         return false;
     }
@@ -302,8 +316,8 @@ public class DataBridge implements VizArchitecture {
             }
         } finally {
             if (graphModel != null) {
-                graph.readUnlockAll();
                 graph.writeUnlock();
+                graph.readUnlockAll();
             }
         }
 
@@ -363,7 +377,11 @@ public class DataBridge implements VizArchitecture {
             }
             edgeColumnObservers = null;
         }
-        Column[] edgeColumns = textModelImpl.getEdgeTextColumns();
+
+        Column[] edgeTextColumns = textModelImpl.getEdgeTextColumns();
+        Column[] edgeColumns = Arrays.copyOf(edgeTextColumns, edgeTextColumns.length + 1);
+        edgeColumns[edgeColumns.length - 1] = graphModel.getEdgeTable().getColumn("weight");//Make sure to always observe weight changes
+
         edgeColumnHashCode = Arrays.hashCode(edgeColumns);
         edgeColumnObservers = new ColumnObserver[edgeColumns.length];
         for (int i = 0; i < edgeColumns.length; i++) {

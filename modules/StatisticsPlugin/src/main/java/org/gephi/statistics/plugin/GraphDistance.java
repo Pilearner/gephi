@@ -153,8 +153,6 @@ public class GraphDistance implements Statistics, LongTask {
      */
     @Override
     public void execute(GraphModel graphModel) {
-        isDirected = graphModel.isDirected();
-
         Graph graph;
         if (isDirected) {
             graph = graphModel.getDirectedGraphVisible();
@@ -210,7 +208,8 @@ public class GraphDistance implements Statistics, LongTask {
         int count = 0;
 
         int totalPaths = 0;
-        for (Node s : graph.getNodes()) {
+        NodeIterable nodesIterable = graph.getNodes();
+        for (Node s : nodesIterable) {
             Stack<Node> S = new Stack<>();
 
             LinkedList<Node>[] P = new LinkedList[n];
@@ -281,6 +280,7 @@ public class GraphDistance implements Statistics, LongTask {
             }
             count++;
             if (isCanceled) {
+                nodesIterable.doBreak();
                 return metrics;
             }
             Progress.progress(progress, count);

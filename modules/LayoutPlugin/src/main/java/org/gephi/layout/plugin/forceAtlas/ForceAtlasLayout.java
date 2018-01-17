@@ -54,6 +54,7 @@ import org.openide.util.NbBundle;
 
 import java.util.ArrayList;
 import java.util.List;
+import org.gephi.graph.api.Interval;
 import org.openide.util.Exceptions;
 
 /**
@@ -100,12 +101,24 @@ public class ForceAtlasLayout extends AbstractLayout implements Layout {
 
     @Override
     public void initAlgo() {
+        ensureSafeLayoutNodePositions(graphModel);
+    }
+
+    private double getEdgeWeight(Edge edge, boolean isDynamicWeight, Interval interval) {
+        if (isDynamicWeight) {
+            return edge.getWeight(interval);
+        } else {
+            return edge.getWeight();
+        }
     }
 
     @Override
     public void goAlgo() {
         this.graph = graphModel.getGraphVisible();
         graph.readLock();
+        boolean isDynamicWeight = graphModel.getEdgeTable().getColumn("weight").isDynamic();
+        Interval interval = graph.getView().getTimeInterval();
+
         try {
             Node[] nodes = graph.getNodes().toArray();
             Edge[] edges = graph.getEdges().toArray();
@@ -148,7 +161,7 @@ public class ForceAtlasLayout extends AbstractLayout implements Layout {
                         Node nf = e.getSource();
                         Node nt = e.getTarget();
                         double bonus = (nf.isFixed() || nt.isFixed()) ? (100) : (1);
-                        bonus *= e.getWeight();
+                        bonus *= getEdgeWeight(e, isDynamicWeight, interval);
                         ForceVectorUtils.fcBiAttractor_noCollide(nf, nt, bonus * getAttractionStrength() / (1 + graph.getDegree(nf)));
                     }
                 } else {
@@ -156,7 +169,7 @@ public class ForceAtlasLayout extends AbstractLayout implements Layout {
                         Node nf = e.getSource();
                         Node nt = e.getTarget();
                         double bonus = (nf.isFixed() || nt.isFixed()) ? (100) : (1);
-                        bonus *= e.getWeight();
+                        bonus *= getEdgeWeight(e, isDynamicWeight, interval);
                         ForceVectorUtils.fcBiAttractor_noCollide(nf, nt, bonus * getAttractionStrength());
                     }
                 }
@@ -166,7 +179,7 @@ public class ForceAtlasLayout extends AbstractLayout implements Layout {
                         Node nf = e.getSource();
                         Node nt = e.getTarget();
                         double bonus = (nf.isFixed() || nt.isFixed()) ? (100) : (1);
-                        bonus *= e.getWeight();
+                        bonus *= getEdgeWeight(e, isDynamicWeight, interval);
                         ForceVectorUtils.fcBiAttractor(nf, nt, bonus * getAttractionStrength() / (1 + graph.getDegree(nf)));
                     }
                 } else {
@@ -174,7 +187,7 @@ public class ForceAtlasLayout extends AbstractLayout implements Layout {
                         Node nf = e.getSource();
                         Node nt = e.getTarget();
                         double bonus = (nf.isFixed() || nt.isFixed()) ? (100) : (1);
-                        bonus *= e.getWeight();
+                        bonus *= getEdgeWeight(e, isDynamicWeight, interval);
                         ForceVectorUtils.fcBiAttractor(nf, nt, bonus * getAttractionStrength());
                     }
                 }

@@ -7,18 +7,18 @@
     <parent>
         <groupId>org.gephi</groupId>
         <artifactId>gephi-parent</artifactId>
-        <version>0.9.2-SNAPSHOT</version>
+        <version>0.9.3-SNAPSHOT</version>
         <relativePath>../..</relativePath>
     </parent>
 
     <groupId>org.gephi</groupId>
     <artifactId>gephi</artifactId>
     <packaging>nbm-application</packaging>
-    <version>0.9.2-SNAPSHOT</version>
+    <version>0.9.3-SNAPSHOT</version>
     <name>gephi-app</name>
     
     <properties>
-        <skipJarGoal>false</skipJarGoal>
+        <jarGoalPhase>package</jarGoalPhase>
         <skipCreateTargz>true</skipCreateTargz>
         <skipReplaceWindowsIcon>true</skipReplaceWindowsIcon>
         <skipCreateExe>true</skipCreateExe>
@@ -479,19 +479,19 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-jar-plugin</artifactId>
-                <configuration combine.self="override"> <!-- Override for not using the archive - manifestFile from parent pom -->
-                    <skip>${skipJarGoal}</skip>
+                <configuration combine.self="override">
+                    <!-- Override for not using the archive - manifestFile from parent pom -->
                 </configuration>
                 <executions>
                     <execution>
-                        <phase>package</phase>
+                        <phase>${jarGoalPhase}</phase>
                         <goals>
                             <goal>jar</goal>
                         </goals>
                     </execution>
                 </executions>
             </plugin>
-
+            
             <!-- Disable the ZIP goal. Also set up the location of the gephi.conf -->
             <plugin>
                 <groupId>org.codehaus.mojo</groupId>
@@ -553,7 +553,7 @@
         <profile>
             <id>deployment</id>
             <properties>
-                <skipJarGoal>true</skipJarGoal>
+                <jarGoalPhase>none</jarGoalPhase>
             </properties>
 
             <!-- Localization dependency -->
@@ -694,7 +694,7 @@
 
                                         <!-- Move bin/gephi script into MacOS/gephi and modify the script so it founds its resources -->
                                         <move file="${project.build.directory}/${gephi.appbundle.name}.app/Contents/Resources/${brandingToken}/bin/${brandingToken}" todir="${project.build.directory}/${gephi.appbundle.name}.app/Contents/MacOS"/>
-                                        <replace file="${project.build.directory}/${gephi.appbundle.name}.app/Contents/MacOS/${brandingToken}" token="`dirname &quot;$PRG&quot;`" value="`dirname &quot;$PRG&quot;`&quot;/../Resources/gephi/bin&quot;"/>
+                                        <replace file="${project.build.directory}/${gephi.appbundle.name}.app/Contents/MacOS/${brandingToken}" token="`dirname &quot;$PRG&quot;`" value="`dirname &quot;$PRG&quot;`&quot;/../Resources/${brandingToken}/bin&quot;"/>
                                         <chmod file="${project.build.directory}/${gephi.appbundle.name}.app/Contents/MacOS/${brandingToken}" perm="ugo+rx"/>
 
                                         <!-- Download and untar JRE -->
@@ -713,14 +713,14 @@
                                         <exec dir="${project.build.directory}" executable="tar">
                                             <arg line="-zxf"/>
                                             <arg line="${gephi.bundle.jre.version}.tar.gz"/>
-                                            <arg line="-C ${gephi.appbundle.name}.app/Contents/PlugIns"/>
+                                            <arg line="-C &quot;${gephi.appbundle.name}.app/Contents/PlugIns&quot;"/>
                                         </exec>
 
                                         <!-- Remove quarantine bit set recursively on JRE -->
                                         <exec dir="${project.build.directory}" os="Mac OS X" executable="xattr">
                                             <arg line="-rd"/>
                                             <arg line="com.apple.quarantine"/>
-                                            <arg line="${gephi.appbundle.name}.app/Contents/PlugIns"/>
+                                            <arg line="&quot;${gephi.appbundle.name}.app/Contents/PlugIns&quot;"/>
                                         </exec>
 
                                         <!-- Get the JRE folder name -->
@@ -805,7 +805,7 @@
                                     <goal>single</goal>
                                 </goals>
                                 <configuration>
-                                    <skip>${skipCreateTargz}</skip>
+                                    <skipAssembly>${skipCreateTargz}</skipAssembly>
                                     <tarLongFileMode>gnu</tarLongFileMode>
                                     <finalName>${brandingToken}-${project.version}</finalName>
                                     <descriptors>

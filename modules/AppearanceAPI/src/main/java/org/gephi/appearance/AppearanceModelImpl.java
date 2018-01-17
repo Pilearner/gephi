@@ -179,6 +179,7 @@ public class AppearanceModelImpl implements AppearanceModel {
     @Override
     public Partition getNodePartition(Graph graph, Column column) {
         synchronized (functionLock) {
+            refreshFunctions(graph);
             FunctionsModel m;
             if (graph.getView().isMainView()) {
                 m = functionsMain;
@@ -195,6 +196,7 @@ public class AppearanceModelImpl implements AppearanceModel {
     @Override
     public Partition getEdgePartition(Graph graph, Column column) {
         synchronized (functionLock) {
+            refreshFunctions(graph);
             FunctionsModel m;
             if (graph.getView().isMainView()) {
                 m = functionsMain;
@@ -210,7 +212,6 @@ public class AppearanceModelImpl implements AppearanceModel {
 
     private FunctionsModel refreshFunctions(Graph graph) {
         synchronized (functionLock) {
-
             FunctionsModel m;
             if (graph.getView().isMainView()) {
                 m = functionsMain;
@@ -470,7 +471,6 @@ public class AppearanceModelImpl implements AppearanceModel {
 
         protected void refreshFunctions() {
             graph.readLock();
-
             try {
                 boolean graphHasChanged = graphObserver.isNew() || graphObserver.hasGraphChanged();
                 if (graphHasChanged) {
@@ -481,7 +481,7 @@ public class AppearanceModelImpl implements AppearanceModel {
                 }
                 refreshAttributeFunctions(graphHasChanged);
             } finally {
-                graph.readUnlock();
+                graph.readUnlockAll();
             }
         }
 
@@ -636,14 +636,10 @@ public class AppearanceModelImpl implements AppearanceModel {
     }
 
     private boolean isPartition(Graph graph, Column column) {
-        int valueCount, elementCount;
         if (column.isDynamic()) {
             if (!column.isNumber()) {
                 return true;
             }
-            Set<Object> set = new HashSet<>();
-            boolean hasNullValue = false;
-            int elements = 0;
             ElementIterable<? extends Element> iterable = AttributeUtils.isNodeColumn(column) ? graph.getNodes() : graph.getEdges();
             for (Element el : iterable) {
                 TimeMap val = (TimeMap) el.getAttribute(column);
@@ -651,16 +647,14 @@ public class AppearanceModelImpl implements AppearanceModel {
                     Object[] va = val.toValuesArray();
                     for (Object v : va) {
                         if (v != null) {
-                            set.add(v);
-                        } else {
-                            hasNullValue = true;
+                            iterable.doBreak();
+                            return true;
                         }
-                        elements++;
                     }
                 }
             }
-            valueCount = set.size();
-            elementCount = elements;
+
+            return false;
         } else if (column.isIndexed()) {
             if (!column.isNumber()) {
                 return true;
@@ -671,13 +665,10 @@ public class AppearanceModelImpl implements AppearanceModel {
             } else {
                 index = graphModel.getEdgeIndex(graph.getView());
             }
-            valueCount = index.countValues(column);
-            elementCount = index.countElements(column);
+            return index.countValues(column) > 0;
         } else {
             return false;
         }
-        double ratio = valueCount / (double) elementCount;
-        return ratio <= 0.5 || (valueCount <= 100 && valueCount != elementCount);
     }
 
     private boolean isRanking(Graph graph, Column column) {
